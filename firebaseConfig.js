@@ -1,9 +1,15 @@
-import { initializeApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  initializeAuth,
+  getAuth,
+  getReactNativePersistence,
+  browserLocalPersistence,
+} from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-// Tu configuración real de Firebase
+// Configuración de Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyAqO0j83iUJe-kD0QpkBJba2C2Qb6XSK0g",
   authDomain: "perfectshine-fe817.firebaseapp.com",
@@ -13,15 +19,23 @@ const firebaseConfig = {
   appId: "1:212848395229:web:83e8ae7d62fd0743a92c34"
 };
 
-// Inicializar la aplicación de Firebase
-const app = initializeApp(firebaseConfig);
+// Inicializar Firebase de forma segura para Fast Refresh y Web
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Inicializar Autenticación con almacenamiento local seguro para Expo
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// Inicializar Authentication según la plataforma con salvaguarda de reinicialización
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence:
+      Platform.OS === 'web'
+        ? browserLocalPersistence
+        : getReactNativePersistence(AsyncStorage),
+  });
+} catch (e) {
+  auth = getAuth(app);
+}
 
-// Inicializar Firestore (Base de Datos)
+// Inicializar Firestore
 const db = getFirestore(app);
 
-export { auth, db };
+export { app, auth, db };

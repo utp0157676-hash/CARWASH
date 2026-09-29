@@ -17,18 +17,34 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Escuchar el estado de autenticación en tiempo real
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        // Obtener datos adicionales del usuario desde Firestore
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        setUser({
-          uid: currentUser.uid,
-          email: currentUser.email,
-          ...(userDoc.exists() ? userDoc.data() : {}),
-        });
-      } else {
+      try {
+        if (currentUser) {
+          // Obtener datos adicionales del usuario desde Firestore
+          let extraData = {};
+          try {
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+            if (userDoc.exists()) {
+              extraData = userDoc.data();
+            }
+          } catch (docErr) {
+            console.warn('Advertencia al consultar datos de usuario en Firestore:', docErr.message);
+          }
+
+          setUser({
+            uid: currentUser.uid,
+            email: currentUser.email,
+            name: extraData.name || extraData.username || currentUser.email?.split('@')[0] || 'Usuario',
+            ...extraData,
+          });
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        console.error('Error en onAuthStateChanged:', err);
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -39,13 +55,27 @@ export const AuthProvider = ({ children }) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const newUser = userCredential.user;
 
-    // Guardar los datos del usuario en la colección 'users'
-    await setDoc(doc(db, 'users', newUser.uid), {
+    const userData = {
       uid: newUser.uid,
-      name: name,
+      name: name || '',
+      username: name || '',
       email: email,
       phone: phone || '',
+      role: 'client',
       createdAt: new Date().toISOString(),
+    };
+
+    // Guardar los datos del usuario en la colección 'users'
+    try {
+      await setDoc(doc(db, 'users', newUser.uid), userData);
+    } catch (dbErr) {
+      console.warn('Error al guardar datos de usuario en Firestore:', dbErr);
+    }
+
+    setUser({
+      uid: newUser.uid,
+      email: newUser.email,
+      ...userData,
     });
 
     return newUser;
@@ -59,6 +89,7 @@ export const AuthProvider = ({ children }) => {
   // Función para cerrar sesión
   const logout = async () => {
     await signOut(auth);
+    setUser(null);
   };
 
   return (
